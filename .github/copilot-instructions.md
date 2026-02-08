@@ -72,5 +72,5 @@ Universal guidance for automated code reviews. Prioritize real bugs and security
 ### Non-Issues
 
 - TODOs or FIXMEs (these are intentional markers)
-- Console.log in development code (unless in production paths)
+- `console.log` in CLI scripts and build tools (use `console.debug` for temporary debugging in app code)
 - Magic numbers that are obvious in context (HTTP status codes, etc.)
