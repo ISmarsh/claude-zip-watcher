@@ -34,13 +34,6 @@ Universal guidance for automated code reviews. Prioritize real bugs and security
 - Incorrect API usage (wrong method signatures, missing required params)
 - Resource leaks (unclosed connections, missing cleanup)
 
-### Python
-
-- Path traversal: `str.startswith()` for path containment — bypassable via sibling paths (`/foo/bar` vs `/foo/bar2`). Use `Path.is_relative_to()` instead.
-- Encoding: `open(f, encoding="utf-8")` on files written by PowerShell 5.1 — PS 5.1 `-Encoding UTF8` writes a BOM. Use `encoding="utf-8-sig"` to handle both BOM and non-BOM transparently.
-- `pythonw.exe`: `sys.stdout`/`sys.stderr` are `None` under the GUI subsystem. Guard `StreamHandler` and any code that writes to stdout/stderr.
-- `subprocess`/`os.system`: Prefer `shlex.quote()` or list args over string interpolation for shell commands.
-
 ## Do Not Flag
 
 ### Premature Optimization
