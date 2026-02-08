@@ -13,6 +13,7 @@ import ctypes.wintypes
 import json
 import logging
 import re
+import sys
 import time
 import zipfile
 from pathlib import Path
@@ -84,9 +85,11 @@ def setup_logging(log_file: Path) -> logging.Logger:
     file_handler.setFormatter(fmt)
     logger.addHandler(file_handler)
 
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(fmt)
-    logger.addHandler(console_handler)
+    # pythonw.exe sets sys.stderr to None -- skip console handler to avoid errors
+    if sys.stderr is not None:
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(fmt)
+        logger.addHandler(console_handler)
 
     return logger
 
