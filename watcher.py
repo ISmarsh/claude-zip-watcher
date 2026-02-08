@@ -12,9 +12,7 @@ import ctypes
 import ctypes.wintypes
 import json
 import logging
-import os
 import re
-import sys
 import time
 import zipfile
 from pathlib import Path
@@ -162,6 +160,10 @@ def process_zip_file(
         extract_to.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(file_path, "r") as zf:
+            for member in zf.namelist():
+                member_path = (extract_to / member).resolve()
+                if not str(member_path).startswith(str(extract_to.resolve())):
+                    raise ValueError(f"Zip Slip detected: {member}")
             zf.extractall(extract_to)
         logger.info("EXTRACTED: %s -> %s", file_path, extract_to)
 
@@ -169,8 +171,8 @@ def process_zip_file(
         logger.info("DELETED: %s", file_path)
 
         add_todo_entry(todo_file, extract_to.name, logger)
-    except Exception as e:
-        logger.info("ERROR processing %s : %s", file_path, e)
+    except Exception:
+        logger.exception("ERROR processing %s", file_path)
 
 
 class ZipEventHandler(FileSystemEventHandler):

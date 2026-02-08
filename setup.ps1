@@ -40,8 +40,8 @@ if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Adm
 # --- Verify Python + watchdog --------------------------------
 $PythonwExe = (Get-Command pythonw.exe -ErrorAction SilentlyContinue).Source
 $PythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
-if (-not $PythonwExe) {
-    Write-Host "ERROR: pythonw.exe not found on PATH." -ForegroundColor Red
+if (-not $PythonwExe -or -not $PythonExe) {
+    Write-Host "ERROR: python.exe / pythonw.exe not found on PATH." -ForegroundColor Red
     Write-Host "Install Python 3.11+ from https://www.python.org/downloads/"
     exit 1
 }
@@ -363,7 +363,7 @@ if (Test-Path $ConfigFile) {
         $changed = $true
     }
     if ($changed) {
-        $config | ConvertTo-Json | Set-Content $ConfigFile
+        $config | ConvertTo-Json | Set-Content $ConfigFile -Encoding UTF8
         Write-Host ""
         Write-Host "  Updated config.json" -ForegroundColor Green
     }

@@ -31,7 +31,7 @@ Polling alone works fine but adds latency. When observer events *do* fire, they 
 
 ### Why 10 minutes?
 
-In practice, the observer catches events reliably on Google Drive's stream mode -- all test runs showed 100% event-driven detection with zero polling catches. The polling exists as insurance for the documented edge cases where virtual filesystem drivers silently drop events. Since the expected miss rate is near-zero, a 10-minute interval keeps the safety net without wasting cycles. For immediate checks, use `check_now.py` or `--check-now`.
+In practice, the observer catches events reliably on Google Drive's stream mode -- all test runs showed 100% event-driven detection with zero polling catches. The polling exists as insurance for the documented edge cases where virtual filesystem drivers silently drop events. Since the expected miss rate is near-zero, a 10-minute interval keeps the safety net without wasting cycles. For immediate checks, use `watcher.py --check-now`.
 
 The poll interval is configurable via `config.json` or `--poll-interval <seconds>`.
 
