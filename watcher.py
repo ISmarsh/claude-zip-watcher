@@ -58,7 +58,7 @@ def load_config(config_path: Path | None = None) -> dict:
     }
     path = config_path or DEFAULT_CONFIG
     if path.exists():
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8-sig") as f:
             defaults.update(json.load(f))
     return defaults
 
