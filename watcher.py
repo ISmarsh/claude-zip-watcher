@@ -160,9 +160,10 @@ def process_zip_file(
         extract_to.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(file_path, "r") as zf:
+            extract_base = extract_to.resolve()
             for member in zf.namelist():
-                member_path = (extract_to / member).resolve()
-                if not str(member_path).startswith(str(extract_to.resolve())):
+                member_path = (extract_base / member).resolve()
+                if not member_path.is_relative_to(extract_base):
                     raise ValueError(f"Zip Slip detected: {member}")
             zf.extractall(extract_to)
         logger.info("EXTRACTED: %s -> %s", file_path, extract_to)

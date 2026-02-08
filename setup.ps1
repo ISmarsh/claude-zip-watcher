@@ -49,8 +49,7 @@ if (-not $PythonwExe -or -not $PythonExe) {
 & $PythonExe -c "import watchdog" 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  Installing watchdog..." -ForegroundColor Cyan
-    $pipExe = Join-Path (Split-Path $PythonExe) "Scripts\pip.exe"
-    & $pipExe install watchdog
+    & $PythonExe -m pip install watchdog
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: Failed to install watchdog." -ForegroundColor Red
         exit 1
