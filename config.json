@@ -1,0 +1,9 @@
+{
+  "watch_folder": "G:\\My Drive\\Claude Files",
+  "destination_folder": "C:\\Dev",
+  "todo_file": "C:\\Dev\\todo.md",
+  "poll_interval_seconds": 600,
+  "file_lock_retries": 30,
+  "file_lock_retry_delay_seconds": 2,
+  "fsw_settle_delay_seconds": 3
+}

@@ -1,9 +1,10 @@
 # ============================================================
 # setup.ps1
 # One-script setup for Claude Zip Watcher:
+#   0. Verify Python + watchdog
 #   1. Install Google Drive for Desktop (stream mode)
 #   2. Configure drive letter and watch folder
-#   3. Register scheduled task for the watcher
+#   3. Register scheduled task for the watcher (pythonw.exe)
 #
 # Detects completed steps and skips them. Safe to re-run.
 #
@@ -14,7 +15,8 @@
 # --- CONFIGURATION -------------------------------------------
 $DriveLetter = "G"
 $WatchFolderName = "Claude Files"
-$WatcherScript = Join-Path $PSScriptRoot "watch-and-unzip.ps1"
+$WatcherScript = Join-Path $PSScriptRoot "watcher.py"
+$ConfigFile = Join-Path $PSScriptRoot "config.json"
 $TaskName = "Claude Zip Watcher"
 $DestinationFolder = "C:\Dev"
 # -------------------------------------------------------------
@@ -35,6 +37,26 @@ if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Adm
 }
 
 # --- Detect current state ------------------------------------
+# --- Verify Python + watchdog --------------------------------
+$PythonwExe = (Get-Command pythonw.exe -ErrorAction SilentlyContinue).Source
+$PythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+if (-not $PythonwExe -or -not $PythonExe) {
+    Write-Host "ERROR: python.exe / pythonw.exe not found on PATH." -ForegroundColor Red
+    Write-Host "Install Python 3.11+ from https://www.python.org/downloads/"
+    exit 1
+}
+# Check watchdog is installed
+& $PythonExe -c "import watchdog" 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  Installing watchdog..." -ForegroundColor Cyan
+    & $PythonExe -m pip install watchdog
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: Failed to install watchdog." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "  watchdog installed." -ForegroundColor Green
+}
+
 $driveInstalled = (Get-ItemProperty "HKLM:\SOFTWARE\Google\Drive" -ErrorAction SilentlyContinue) -or (Test-Path $DrivefsConfigPath)
 $regMountPoint = (Get-ItemProperty -Path $RegistryPath -Name "DefaultMountPoint" -ErrorAction SilentlyContinue).DefaultMountPoint
 $registryConfigured = $regMountPoint -eq $DriveLetter
@@ -170,14 +192,6 @@ if ($registryConfigured) {
         $driveMounted = Test-Path $MyDrivePath
         $watchFolderExists = Test-Path $WatchPath
         Write-Host "  Keeping ${DriveLetter}:." -ForegroundColor Green
-
-        # Update watcher script to match
-        $watcherContent = Get-Content $WatcherScript -Raw
-        $updatedContent = $watcherContent -replace '(?<=\$WatchFolder\s*=\s*")[A-Z](?=:\\)', $DriveLetter
-        if ($updatedContent -ne $watcherContent) {
-            Set-Content -Path $WatcherScript -Value $updatedContent -NoNewline
-            Write-Host "  Updated watch-and-unzip.ps1 to use ${DriveLetter}:" -ForegroundColor Green
-        }
     } else {
         New-ItemProperty -Path $RegistryPath -Name "DefaultMountPoint" -Value $DriveLetter -PropertyType String -Force | Out-Null
         New-ItemProperty -Path $RegistryPath -Name "AutoStartOnLogin" -Value 1 -PropertyType DWord -Force | Out-Null
@@ -209,7 +223,7 @@ if ($watchFolderExists) {
     New-Item -Path $WatchPath -ItemType Directory -Force | Out-Null
     Write-Host "  Created: $WatchPath" -ForegroundColor Green
 } else {
-    # Drive not mounted — need sign-in
+    # Drive not mounted -- need sign-in
     Write-Host ""
     Write-Host "  Google Drive is not mounted at ${DriveLetter}: yet." -ForegroundColor Yellow
     Write-Host "  Please sign in now:" -ForegroundColor Cyan
@@ -220,7 +234,7 @@ if ($watchFolderExists) {
     Write-Host "       Ensure 'Stream files' is selected" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  1. Wait for sign-in (up to 5 minutes)" -ForegroundColor Cyan
-    Write-Host "  2. Skip — I'll sign in later and re-run this script" -ForegroundColor Cyan
+    Write-Host "  2. Skip -- I'll sign in later and re-run this script" -ForegroundColor Cyan
     Write-Host ""
     $choice = Read-Host "  Enter 1 or 2"
 
@@ -240,7 +254,7 @@ if ($watchFolderExists) {
         if (-not (Test-Path $MyDrivePath)) {
             Write-Host ""
             Write-Host "  Timed out after $maxWait seconds." -ForegroundColor Yellow
-            Write-Host "  Re-run this script after signing in — it will pick up where it left off."
+            Write-Host "  Re-run this script after signing in -- it will pick up where it left off."
             exit 1
         }
 
@@ -269,6 +283,43 @@ if (-not (Test-Path $WatcherScript)) {
     exit 1
 }
 
+# Build task configuration
+# pythonw.exe is a GUI-subsystem executable -- Windows never creates a console
+# window for it, eliminating the brief flash that powershell.exe -WindowStyle Hidden causes.
+$taskAction = New-ScheduledTaskAction `
+    -Execute "`"$PythonwExe`"" `
+    -Argument "`"$WatcherScript`""
+
+$taskTrigger = New-ScheduledTaskTrigger -AtLogon
+# Re-launch every 30 min if process died; IgnoreNew prevents duplicates
+$taskTrigger.Repetition = (New-ScheduledTaskTrigger -Once -At "00:00" `
+    -RepetitionInterval (New-TimeSpan -Minutes 30)).Repetition
+
+$taskSettings = New-ScheduledTaskSettingsSet `
+    -RestartCount 3 `
+    -RestartInterval (New-TimeSpan -Minutes 1) `
+    -ExecutionTimeLimit ([System.TimeSpan]::Zero) `
+    -StartWhenAvailable `
+    -DontStopIfGoingOnBatteries `
+    -AllowStartIfOnBatteries `
+    -MultipleInstances IgnoreNew
+
+function Register-WatcherTask {
+    try {
+        Register-ScheduledTask `
+            -TaskName $TaskName `
+            -Action $taskAction `
+            -Trigger $taskTrigger `
+            -Settings $taskSettings `
+            -RunLevel Limited `
+            -Force | Out-Null
+        return $true
+    } catch {
+        Write-Host "  ERROR: Failed to create scheduled task: $_" -ForegroundColor Red
+        return $false
+    }
+}
+
 if ($taskExists) {
     Write-Host "  Task '$TaskName' already exists." -ForegroundColor Green
     Write-Host ""
@@ -279,47 +330,42 @@ if ($taskExists) {
     if ($choice -ne "2") {
         Write-Host "  Kept existing task." -ForegroundColor Green
     } else {
-        schtasks /create `
-            /tn $TaskName `
-            /tr "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$WatcherScript`"" `
-            /sc onlogon `
-            /rl limited `
-            /f 2>$null
-
-        if ($LASTEXITCODE -eq 0) {
+        if (Register-WatcherTask) {
             Write-Host "  Replaced." -ForegroundColor Green
-        } else {
-            Write-Host "  ERROR: Failed to create scheduled task." -ForegroundColor Red
-            exit 1
-        }
+        } else { exit 1 }
     }
 } else {
-    schtasks /create `
-        /tn $TaskName `
-        /tr "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$WatcherScript`"" `
-        /sc onlogon `
-        /rl limited `
-        /f 2>$null
-
-    if ($LASTEXITCODE -eq 0) {
+    if (Register-WatcherTask) {
         Write-Host "  Scheduled task registered." -ForegroundColor Green
         Write-Host "  Runs at login: $WatcherScript"
-    } else {
-        Write-Host "  ERROR: Failed to create scheduled task." -ForegroundColor Red
-        exit 1
-    }
+    } else { exit 1 }
 }
 $completed += "Scheduled task"
 
 # =============================================================
-# Update watcher script destination if changed
+# Update config.json with current settings
 # =============================================================
-$watcherContent = Get-Content $WatcherScript -Raw
-$updatedContent = $watcherContent -replace '(?<=\$DestinationFolder\s*=\s*")[^"]+', $DestinationFolder
-if ($updatedContent -ne $watcherContent) {
-    Set-Content -Path $WatcherScript -Value $updatedContent -NoNewline
-    Write-Host ""
-    Write-Host "  Updated watch-and-unzip.ps1 destination to: $DestinationFolder" -ForegroundColor Green
+if (Test-Path $ConfigFile) {
+    $config = Get-Content $ConfigFile -Raw | ConvertFrom-Json
+    $changed = $false
+    if ($config.watch_folder -ne $WatchPath) {
+        $config.watch_folder = $WatchPath
+        $changed = $true
+    }
+    if ($config.destination_folder -ne $DestinationFolder) {
+        $config.destination_folder = $DestinationFolder
+        $changed = $true
+    }
+    $todoFile = Join-Path $DestinationFolder "todo.md"
+    if ($config.todo_file -ne $todoFile) {
+        $config.todo_file = $todoFile
+        $changed = $true
+    }
+    if ($changed) {
+        $config | ConvertTo-Json | Set-Content $ConfigFile -Encoding UTF8
+        Write-Host ""
+        Write-Host "  Updated config.json" -ForegroundColor Green
+    }
 }
 
 # =============================================================
@@ -355,8 +401,8 @@ Write-Host ""
 Write-Host "  Google Drive:  ${DriveLetter}:" -ForegroundColor Cyan
 Write-Host "  Watch folder:  $WatchPath" -ForegroundColor Cyan
 Write-Host "  Extracts to:   $DestinationFolder" -ForegroundColor Cyan
-Write-Host "  Watcher:       runs at login" -ForegroundColor Cyan
+Write-Host "  Watcher:       runs at login, auto-restarts, 30-min heartbeat" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  To start the watcher now:" -ForegroundColor Cyan
-Write-Host "    powershell -ExecutionPolicy Bypass -File `"$WatcherScript`""
+Write-Host "    pythonw.exe `"$WatcherScript`""
 Write-Host "============================================" -ForegroundColor $summaryColor
