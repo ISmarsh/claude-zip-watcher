@@ -1,1 +1,4 @@
 unzip-log.txt
+watcher-error.txt
+__pycache__/
+*.pyc
