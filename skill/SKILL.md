@@ -1,6 +1,6 @@
 ---
 name: unpack-gdrive-projects
-description: Manage the Google Drive zip watcher - check for pending zips, view logs, verify watcher status
+description: Manage the Google Drive file watcher - check for pending files, view logs, verify watcher status
 user-invocable: true
 allowed-tools:
   - Bash(python *)
@@ -11,14 +11,14 @@ argument-hint: "[check|status|log|config]"
 
 # Unpack Google Drive Projects
 
-Manage the Claude Zip Watcher that monitors Google Drive for uploaded zip files and extracts them to the dev workspace.
+Manage the Claude File Watcher that monitors Google Drive for uploaded files and processes them into the dev workspace. Zips are extracted (with nested folder collapsing and update-in-place for duplicates). Other files are copied directly.
 
-Find the watcher path from the project's CLAUDE.md context (look for "Claude Zip Watcher" under Workspace Tools).
+Find the watcher path from the project's CLAUDE.md context (look for "Claude File Watcher" under Workspace Tools).
 
 ## Arguments
 
 `$ARGUMENTS` can be:
-- Empty or `check`: Run a one-time check for pending zip files (default)
+- Empty or `check`: Run a one-time check for pending files (default)
 - `status`: Check if the watcher scheduled task is running
 - `log`: Show recent log entries
 - `config`: Show current watcher configuration
@@ -45,7 +45,7 @@ powershell -Command "Start-Process 'C:\Program Files\Google\Drive File Stream\la
 python <watcher-dir>/watcher.py --check-now
 ```
 
-3. Report: how many zips were found and extracted (or "no pending zips"), destination for each, any errors.
+3. Report: how many files were processed (or "no pending files"), destination for each, noting EXTRACTED/UPDATED/COPIED/COLLAPSED status, and any errors.
 
 ## status
 
