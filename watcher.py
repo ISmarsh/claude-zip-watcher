@@ -139,12 +139,13 @@ def collapse_nested_folder(extract_to: Path, logger: logging.Logger) -> None:
     if len(children) != 1 or not children[0].is_dir():
         return
     inner = children[0]
+    items = list(inner.iterdir())
     # Verify no name conflicts before moving
-    for item in inner.iterdir():
+    for item in items:
         if (extract_to / item.name).exists():
             logger.info("SKIP COLLAPSE: %s would conflict with existing item", item.name)
             return
-    for item in inner.iterdir():
+    for item in items:
         item.rename(extract_to / item.name)
     inner.rmdir()
     logger.info("COLLAPSED: %s/ (removed redundant %s/ nesting)", extract_to.name, inner.name)
@@ -167,19 +168,26 @@ def process_zip_file(
     try:
         extract_to = destination / file_path.stem
         is_update = extract_to.exists()
-        if is_update:
-            shutil.rmtree(extract_to)
-            logger.info("REPLACING: %s", extract_to)
-        extract_to.mkdir(parents=True, exist_ok=True)
+        tmp_dir = destination / f".tmp-{file_path.stem}"
+
+        # Extract to temp dir first, then swap — safe if extraction fails
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir)
+        tmp_dir.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(file_path, "r") as zf:
-            extract_base = extract_to.resolve()
+            extract_base = tmp_dir.resolve()
             for member in zf.namelist():
                 member_path = (extract_base / member).resolve()
                 if not member_path.is_relative_to(extract_base):
                     raise ValueError(f"Zip Slip detected: {member}")
-            zf.extractall(extract_to)
-        collapse_nested_folder(extract_to, logger)
+            zf.extractall(tmp_dir)
+        collapse_nested_folder(tmp_dir, logger)
+
+        # Swap into place
+        if is_update:
+            shutil.rmtree(extract_to)
+        tmp_dir.rename(extract_to)
 
         verb = "UPDATED" if is_update else "EXTRACTED"
         logger.info("%s: %s -> %s", verb, file_path, extract_to)
@@ -215,7 +223,8 @@ def process_file(
         file_path.unlink()
         logger.info("DELETED: %s", file_path)
 
-        add_todo_entry(todo_file, file_path.name, logger)
+        # Skip todo entry for non-zip files — add_todo_entry creates folder-style links
+
     except Exception:
         logger.exception("ERROR processing %s", file_path)
 

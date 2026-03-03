@@ -11,9 +11,9 @@ argument-hint: "[check|status|log|config]"
 
 # Unpack Google Drive Projects
 
-Manage the Claude Zip Watcher that monitors Google Drive for uploaded files and processes them into the dev workspace. Zips are extracted (with nested folder collapsing and update-in-place for duplicates). Other files are copied directly.
+Manage the Claude File Watcher that monitors Google Drive for uploaded files and processes them into the dev workspace. Zips are extracted (with nested folder collapsing and update-in-place for duplicates). Other files are copied directly.
 
-Find the watcher path from the project's CLAUDE.md context (look for "Claude Zip Watcher" under Workspace Tools).
+Find the watcher path from the project's CLAUDE.md context (look for "Claude File Watcher" under Workspace Tools).
 
 ## Arguments
 
