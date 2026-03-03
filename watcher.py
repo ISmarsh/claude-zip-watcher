@@ -1,5 +1,5 @@
 """
-Watch a folder for new .zip files, extract them, and delete the originals.
+Watch a folder for new files. Zips are extracted; other files are copied.
 
 Usage:
     python watcher.py                # Run watcher (default)
@@ -13,6 +13,7 @@ import ctypes.wintypes
 import json
 import logging
 import re
+import shutil
 import sys
 import time
 import zipfile
@@ -118,17 +119,6 @@ def wait_for_file_ready(file_path: Path, retries: int = 30, delay: float = 2.0) 
     return False
 
 
-def resolve_extract_path(destination: Path, folder_name: str) -> Path:
-    """Resolve extraction path, appending _2, _3, etc. for duplicates."""
-    extract_to = destination / folder_name
-    if not extract_to.exists():
-        return extract_to
-    counter = 2
-    while (destination / f"{folder_name}_{counter}").exists():
-        counter += 1
-    return destination / f"{folder_name}_{counter}"
-
-
 def add_todo_entry(todo_file: Path, folder_name: str, logger: logging.Logger) -> None:
     """Append a project section to todo.md if it doesn't already exist."""
     if not todo_file.exists():
@@ -141,6 +131,23 @@ def add_todo_entry(todo_file: Path, folder_name: str, logger: logging.Logger) ->
     with open(todo_file, "a", encoding="utf-8") as f:
         f.write(entry)
     logger.info("TODO: Added entry for %s", folder_name)
+
+
+def collapse_nested_folder(extract_to: Path, logger: logging.Logger) -> None:
+    """If extracted folder contains exactly one subfolder and nothing else, collapse it."""
+    children = list(extract_to.iterdir())
+    if len(children) != 1 or not children[0].is_dir():
+        return
+    inner = children[0]
+    # Verify no name conflicts before moving
+    for item in inner.iterdir():
+        if (extract_to / item.name).exists():
+            logger.info("SKIP COLLAPSE: %s would conflict with existing item", item.name)
+            return
+    for item in inner.iterdir():
+        item.rename(extract_to / item.name)
+    inner.rmdir()
+    logger.info("COLLAPSED: %s/ (removed redundant %s/ nesting)", extract_to.name, inner.name)
 
 
 def process_zip_file(
@@ -158,8 +165,11 @@ def process_zip_file(
         return
 
     try:
-        folder_name = file_path.stem
-        extract_to = resolve_extract_path(destination, folder_name)
+        extract_to = destination / file_path.stem
+        is_update = extract_to.exists()
+        if is_update:
+            shutil.rmtree(extract_to)
+            logger.info("REPLACING: %s", extract_to)
         extract_to.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(file_path, "r") as zf:
@@ -169,18 +179,71 @@ def process_zip_file(
                 if not member_path.is_relative_to(extract_base):
                     raise ValueError(f"Zip Slip detected: {member}")
             zf.extractall(extract_to)
-        logger.info("EXTRACTED: %s -> %s", file_path, extract_to)
+        collapse_nested_folder(extract_to, logger)
+
+        verb = "UPDATED" if is_update else "EXTRACTED"
+        logger.info("%s: %s -> %s", verb, file_path, extract_to)
 
         file_path.unlink()
         logger.info("DELETED: %s", file_path)
 
-        add_todo_entry(todo_file, extract_to.name, logger)
+        if not is_update:
+            add_todo_entry(todo_file, extract_to.name, logger)
     except Exception:
         logger.exception("ERROR processing %s", file_path)
 
 
-class ZipEventHandler(FileSystemEventHandler):
-    """Handles created and moved .zip files in the watch folder."""
+def process_file(
+    file_path: Path,
+    destination: Path,
+    todo_file: Path,
+    logger: logging.Logger,
+    lock_retries: int = 30,
+    lock_delay: float = 2.0,
+) -> None:
+    """Copy a non-zip file to destination, overwriting if it exists."""
+    if not wait_for_file_ready(file_path, lock_retries, lock_delay):
+        timeout = int(lock_retries * lock_delay)
+        logger.info("TIMEOUT: Could not access %s after %d seconds. Skipping.", file_path, timeout)
+        return
+
+    try:
+        dest_file = destination / file_path.name
+        shutil.copy2(file_path, dest_file)
+        logger.info("COPIED: %s -> %s", file_path, dest_file)
+
+        file_path.unlink()
+        logger.info("DELETED: %s", file_path)
+
+        add_todo_entry(todo_file, file_path.name, logger)
+    except Exception:
+        logger.exception("ERROR processing %s", file_path)
+
+
+def process_incoming(
+    file_path: Path,
+    destination: Path,
+    todo_file: Path,
+    logger: logging.Logger,
+    config: dict,
+) -> None:
+    """Route an incoming file to the appropriate processor."""
+    if file_path.suffix.lower() == ".zip":
+        process_zip_file(
+            file_path, destination, todo_file, logger,
+            config["file_lock_retries"],
+            config["file_lock_retry_delay_seconds"],
+        )
+    else:
+        process_file(
+            file_path, destination, todo_file, logger,
+            config["file_lock_retries"],
+            config["file_lock_retry_delay_seconds"],
+        )
+
+
+class FileEventHandler(FileSystemEventHandler):
+    """Handles created and moved files in the watch folder."""
 
     def __init__(self, destination: Path, todo_file: Path,
                  logger: logging.Logger, config: dict):
@@ -192,14 +255,10 @@ class ZipEventHandler(FileSystemEventHandler):
         self.settle_delay = config["fsw_settle_delay_seconds"]
 
     def _handle(self, file_path: Path, change_type: str) -> None:
-        if file_path.suffix.lower() != ".zip":
-            return
         self.logger.info("DETECTED (%s): %s", change_type, file_path)
         time.sleep(self.settle_delay)
-        process_zip_file(
-            file_path, self.destination, self.todo_file, self.logger,
-            self.config["file_lock_retries"],
-            self.config["file_lock_retry_delay_seconds"],
+        process_incoming(
+            file_path, self.destination, self.todo_file, self.logger, self.config,
         )
 
     def on_created(self, event):
@@ -237,25 +296,21 @@ def main() -> None:
         destination.mkdir(parents=True, exist_ok=True)
         logger.info("Created destination folder: %s", destination)
 
-    # Process any existing .zip files on startup
-    existing = sorted(watch_folder.glob("*.zip"))
-    for zip_path in existing:
-        logger.info("Found existing zip: %s", zip_path)
-        process_zip_file(
-            zip_path, destination, todo_file, logger,
-            config["file_lock_retries"],
-            config["file_lock_retry_delay_seconds"],
-        )
+    # Process any existing files on startup
+    existing = sorted(f for f in watch_folder.glob("*") if f.is_file())
+    for file_path in existing:
+        logger.info("Found existing file: %s", file_path)
+        process_incoming(file_path, destination, todo_file, logger, config)
 
     # CheckNow mode: one-time poll, then exit
     if args.check_now:
         if not existing:
-            logger.info("CHECK: No zip files found.")
+            logger.info("CHECK: No files found.")
         return
 
     # Set up watchdog observer (uses ReadDirectoryChangesW on Windows,
     # same underlying API as .NET's FileSystemWatcher)
-    event_handler = ZipEventHandler(destination, todo_file, logger, config)
+    event_handler = FileEventHandler(destination, todo_file, logger, config)
     observer = Observer()
     observer.schedule(event_handler, str(watch_folder), recursive=False)
     observer.start()
@@ -270,13 +325,9 @@ def main() -> None:
         while True:
             time.sleep(poll_interval)
             # Polling fallback — catches anything the observer missed
-            for zip_path in sorted(watch_folder.glob("*.zip")):
-                logger.info("POLL: Found %s", zip_path)
-                process_zip_file(
-                    zip_path, destination, todo_file, logger,
-                    config["file_lock_retries"],
-                    config["file_lock_retry_delay_seconds"],
-                )
+            for file_path in sorted(f for f in watch_folder.glob("*") if f.is_file()):
+                logger.info("POLL: Found %s", file_path)
+                process_incoming(file_path, destination, todo_file, logger, config)
     except KeyboardInterrupt:
         pass
     finally:
