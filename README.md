@@ -1,13 +1,13 @@
-# Claude Zip Watcher
+# Claude GDrive Intake
 
-Automatically extracts zip files dropped into a Google Drive folder to a local directory. Built for getting Claude Code session exports from mobile/web onto a dev machine without manual steps.
+Automatically processes files dropped into a Google Drive folder — zip files are extracted, other files are copied. Built for getting Claude Code session exports from mobile/web onto a dev machine without manual steps.
 
 ## How It Works
 
 1. Google Drive syncs a "Claude Files" folder to your PC via stream mode
 2. When you open your dev workspace in VSCode, a folder-open task runs `--check-now`
-3. Any pending zips are extracted to your destination folder, then deleted from the watch folder
-4. A todo entry is auto-added to your workspace todo.md
+3. Any pending files are processed: zips are extracted and other files are copied to your destination folder, then originals are deleted
+4. A todo entry is auto-added to your workspace todo.md for each processed file
 
 ## Requirements
 
@@ -39,7 +39,7 @@ powershell -ExecutionPolicy Bypass -File setup.ps1
       "label": "GDrive Intake",
       "type": "process",
       "command": "pythonw",
-      "args": ["${workspaceFolder}/claude-zip-watcher/watcher.py", "--check-now"],
+      "args": ["${workspaceFolder}/claude-gdrive-intake/watcher.py", "--check-now"],
       "presentation": { "reveal": "silent" },
       "runOptions": { "runOn": "folderOpen" }
     }

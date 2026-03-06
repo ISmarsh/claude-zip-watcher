@@ -1,5 +1,5 @@
 """
-Watch a folder for new files. Zips are extracted; other files are copied.
+Google Drive file intake. Zips are extracted; other files are copied.
 
 Usage:
     python watcher.py                # Run watcher (default)
@@ -23,7 +23,7 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-LOG_FILE = SCRIPT_DIR / "unzip-log.txt"
+LOG_FILE = SCRIPT_DIR / "intake-log.txt"
 DEFAULT_CONFIG = SCRIPT_DIR / "config.json"
 
 # Win32 constants for exclusive file access check
@@ -66,7 +66,7 @@ def load_config(config_path: Path | None = None) -> dict:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Watch for zip files and extract them")
+    parser = argparse.ArgumentParser(description="Google Drive file intake")
     parser.add_argument("--check-now", action="store_true", help="One-time poll, then exit")
     parser.add_argument("--poll-interval", type=int, help="Poll interval in seconds")
     parser.add_argument("--config", type=Path, help="Path to config.json")
@@ -78,7 +78,7 @@ def setup_logging(log_file: Path) -> logging.Logger:
 
     Matches the existing PowerShell log format: [YYYY-MM-DD HH:MM:SS] message
     """
-    logger = logging.getLogger("zip-watcher")
+    logger = logging.getLogger("gdrive-intake")
     logger.setLevel(logging.INFO)
     fmt = logging.Formatter("[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 

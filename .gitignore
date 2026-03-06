@@ -1,4 +1,4 @@
-unzip-log.txt
+intake-log.txt
 watcher-error.txt
 __pycache__/
 *.pyc

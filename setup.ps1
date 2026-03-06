@@ -1,6 +1,6 @@
 # ============================================================
 # setup.ps1
-# One-script setup for Claude Zip Watcher:
+# One-script setup for Claude GDrive Intake:
 #   0. Verify Python + watchdog
 #   1. Install Google Drive for Desktop (stream mode)
 #   2. Configure drive letter and watch folder
@@ -20,7 +20,7 @@ $DriveLetter = "G"
 $WatchFolderName = "Claude Files"
 $WatcherScript = Join-Path $PSScriptRoot "watcher.py"
 $ConfigFile = Join-Path $PSScriptRoot "config.json"
-$TaskName = "Claude Zip Watcher"
+$TaskName = "Claude GDrive Intake"
 $DestinationFolder = "C:\Dev"
 # -------------------------------------------------------------
 
@@ -68,7 +68,7 @@ $watchFolderExists = Test-Path $WatchPath
 $taskExists = $null -ne (schtasks /query /tn $TaskName 2>$null)
 
 Write-Host ""
-Write-Host "=== Claude Zip Watcher - Setup ===" -ForegroundColor Cyan
+Write-Host "=== Claude GDrive Intake - Setup ===" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Current state:" -ForegroundColor Cyan
 

@@ -2,7 +2,7 @@
 
 ## Problem
 
-Claude Code sessions on mobile/web can generate zip files, but there's no built-in way to get them onto a local dev machine. Google Drive bridges the gap -- upload from phone, auto-sync to desktop -- but watching a cloud-synced virtual filesystem has several non-obvious gotchas.
+Claude Code sessions on mobile/web can generate files (zips, markdown, etc.), but there's no built-in way to get them onto a local dev machine. Google Drive bridges the gap -- upload from phone, auto-sync to desktop -- but watching a cloud-synced virtual filesystem has several non-obvious gotchas.
 
 ## Why Python (v2)
 
@@ -83,7 +83,7 @@ Since `pythonw.exe` has no console, unhandled exceptions vanish silently. The wa
 
 ## Duplicate Handling
 
-If a zip's target folder already exists (e.g., extracting `project.zip` when `C:\Dev\project\` exists), the script appends a counter suffix (`project_2`, `project_3`, etc.) rather than overwriting.
+If a zip's target folder already exists (e.g., extracting `project.zip` when `C:\Dev\project\` exists), the extraction overwrites in place (extract to temp, swap). Non-zip files overwrite their destination if it already exists.
 
 ## Configuration
 

@@ -11,11 +11,11 @@ argument-hint: "[check|log|config]"
 
 # Unpack Google Drive Projects
 
-Manage the Claude File Watcher that processes files from Google Drive into the dev workspace. Zips are extracted (with nested folder collapsing and update-in-place for duplicates). Other files are copied directly.
+Manage the Google Drive file intake that processes files into the dev workspace. Zips are extracted (with nested folder collapsing and update-in-place for duplicates). Other files are copied directly.
 
 The watcher runs automatically when the VSCode workspace opens (via a folder-open task). This skill provides manual control.
 
-Find the watcher path from the project's CLAUDE.md context (look for "Claude Zip Watcher" under Workspace Tools).
+Find the watcher path from the project's CLAUDE.md context (look for "Claude GDrive Intake" under Workspace Tools).
 
 ## Arguments
 
