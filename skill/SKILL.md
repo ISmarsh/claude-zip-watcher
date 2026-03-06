@@ -1,25 +1,26 @@
 ---
 name: unpack-gdrive-projects
-description: Manage the Google Drive file watcher - check for pending files, view logs, verify watcher status
+description: Manage the Google Drive file watcher - check for pending files, view logs, show config
 user-invocable: true
 allowed-tools:
   - Bash(python *)
   - Bash(powershell *)
   - Read
-argument-hint: "[check|status|log|config]"
+argument-hint: "[check|log|config]"
 ---
 
 # Unpack Google Drive Projects
 
-Manage the Claude File Watcher that monitors Google Drive for uploaded files and processes them into the dev workspace. Zips are extracted (with nested folder collapsing and update-in-place for duplicates). Other files are copied directly.
+Manage the Claude File Watcher that processes files from Google Drive into the dev workspace. Zips are extracted (with nested folder collapsing and update-in-place for duplicates). Other files are copied directly.
 
-Find the watcher path from the project's CLAUDE.md context (look for "Claude File Watcher" under Workspace Tools).
+The watcher runs automatically when the VSCode workspace opens (via a folder-open task). This skill provides manual control.
+
+Find the watcher path from the project's CLAUDE.md context (look for "Claude Zip Watcher" under Workspace Tools).
 
 ## Arguments
 
 `$ARGUMENTS` can be:
 - Empty or `check`: Run a one-time check for pending files (default)
-- `status`: Check if the watcher scheduled task is running
 - `log`: Show recent log entries
 - `config`: Show current watcher configuration
 
@@ -46,17 +47,6 @@ python <watcher-dir>/watcher.py --check-now
 ```
 
 3. Report: how many files were processed (or "no pending files"), destination for each, noting EXTRACTED/UPDATED/COPIED/COLLAPSED status, and any errors.
-
-## status
-
-```bash
-powershell -Command "schtasks /query /tn 'Claude Zip Watcher' /v /fo LIST | Select-String 'Status|Last Run|Task To Run'"
-```
-
-Also check if the watcher process is active:
-```bash
-powershell -Command "Get-Process pythonw -ErrorAction SilentlyContinue | Select-Object Id,StartTime"
-```
 
 ## log
 

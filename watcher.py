@@ -119,18 +119,19 @@ def wait_for_file_ready(file_path: Path, retries: int = 30, delay: float = 2.0) 
     return False
 
 
-def add_todo_entry(todo_file: Path, folder_name: str, logger: logging.Logger) -> None:
+def add_todo_entry(todo_file: Path, name: str, logger: logging.Logger, is_file: bool = False) -> None:
     """Append a project section to todo.md if it doesn't already exist."""
     if not todo_file.exists():
         return
     content = todo_file.read_text(encoding="utf-8")
-    pattern = rf"(?m)^## \[.*\]\({re.escape(folder_name)}/?\)"
+    pattern = rf"(?m)^## \[.*\]\({re.escape(name)}/?\)"
     if re.search(pattern, content):
         return
-    entry = f"\n## [{folder_name}]({folder_name}/)\n- [ ] Review and determine next steps\n"
+    link = f"[{name}]({name})" if is_file else f"[{name}]({name}/)"
+    entry = f"\n## {link}\n- [ ] Review and determine next steps\n"
     with open(todo_file, "a", encoding="utf-8") as f:
         f.write(entry)
-    logger.info("TODO: Added entry for %s", folder_name)
+    logger.info("TODO: Added entry for %s", name)
 
 
 def collapse_nested_folder(extract_to: Path, logger: logging.Logger) -> None:
@@ -223,7 +224,7 @@ def process_file(
         file_path.unlink()
         logger.info("DELETED: %s", file_path)
 
-        # Skip todo entry for non-zip files — add_todo_entry creates folder-style links
+        add_todo_entry(todo_file, file_path.name, logger, is_file=True)
 
     except Exception:
         logger.exception("ERROR processing %s", file_path)

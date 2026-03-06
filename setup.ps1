@@ -4,7 +4,10 @@
 #   0. Verify Python + watchdog
 #   1. Install Google Drive for Desktop (stream mode)
 #   2. Configure drive letter and watch folder
-#   3. Register scheduled task for the watcher (pythonw.exe)
+#   3. (Optional) Register scheduled task for background watcher
+#
+# The primary trigger is a VSCode folder-open task (see README).
+# The scheduled task is only needed for continuous background monitoring.
 #
 # Detects completed steps and skips them. Safe to re-run.
 #
@@ -84,9 +87,9 @@ if ($regMountPoint -and -not $registryConfigured) {
 }
 Show-Status "Drive mounted at ${DriveLetter}:" $driveMounted
 Show-Status "Watch folder ($WatchFolderName)" $watchFolderExists
-Show-Status "Scheduled task" $taskExists
+Show-Status "Scheduled task (optional)" $taskExists
 
-$allDone = $driveInstalled -and $registryConfigured -and $driveMounted -and $watchFolderExists -and $taskExists
+$allDone = $driveInstalled -and $registryConfigured -and $driveMounted -and $watchFolderExists
 
 if ($allDone) {
     Write-Host ""
@@ -115,7 +118,7 @@ $completed = @()
 # STEP 1: Google Drive for Desktop
 # =============================================================
 Write-Host ""
-Write-Host "[1/3] Google Drive for Desktop" -ForegroundColor Cyan
+Write-Host "[1/2] Google Drive for Desktop" -ForegroundColor Cyan
 Write-Host "---------------------------------------------"
 
 if ($driveInstalled) {
@@ -213,7 +216,7 @@ $completed += "Registry configured (${DriveLetter}:)"
 # STEP 2: Sign in and create watch folder
 # =============================================================
 Write-Host ""
-Write-Host "[2/3] Watch Folder" -ForegroundColor Cyan
+Write-Host "[2/2] Watch Folder" -ForegroundColor Cyan
 Write-Host "---------------------------------------------"
 
 if ($watchFolderExists) {
@@ -272,39 +275,49 @@ if (Test-Path $WatchPath) {
 }
 
 # =============================================================
-# STEP 3: Scheduled task
+# OPTIONAL: Scheduled task (background watcher)
 # =============================================================
+# The primary trigger is a VSCode folder-open task. The scheduled
+# task is only needed if you want continuous background monitoring.
 Write-Host ""
-Write-Host "[3/3] Scheduled Task" -ForegroundColor Cyan
+Write-Host "[Optional] Background Watcher (Scheduled Task)" -ForegroundColor Cyan
 Write-Host "---------------------------------------------"
+Write-Host "  The recommended setup uses a VSCode folder-open task (see README)."
+Write-Host "  A scheduled task is only needed for continuous background monitoring."
+Write-Host ""
+Write-Host "  1. Skip (recommended -- use VSCode folder-open task)" -ForegroundColor Cyan
+Write-Host "  2. Register scheduled task for background watcher" -ForegroundColor Cyan
 
-if (-not (Test-Path $WatcherScript)) {
-    Write-Host "  ERROR: Watcher script not found at $WatcherScript" -ForegroundColor Red
-    exit 1
+if ($taskExists) {
+    Write-Host "  3. Remove existing scheduled task" -ForegroundColor Cyan
 }
 
-# Build task configuration
-# pythonw.exe is a GUI-subsystem executable -- Windows never creates a console
-# window for it, eliminating the brief flash that powershell.exe -WindowStyle Hidden causes.
-$taskAction = New-ScheduledTaskAction `
-    -Execute "`"$PythonwExe`"" `
-    -Argument "`"$WatcherScript`""
+Write-Host ""
+$choice = Read-Host "  Enter choice"
 
-$taskTrigger = New-ScheduledTaskTrigger -AtLogon
-# Re-launch every 30 min if process died; IgnoreNew prevents duplicates
-$taskTrigger.Repetition = (New-ScheduledTaskTrigger -Once -At "00:00" `
-    -RepetitionInterval (New-TimeSpan -Minutes 30)).Repetition
+if ($choice -eq "2") {
+    if (-not (Test-Path $WatcherScript)) {
+        Write-Host "  ERROR: Watcher script not found at $WatcherScript" -ForegroundColor Red
+        exit 1
+    }
 
-$taskSettings = New-ScheduledTaskSettingsSet `
-    -RestartCount 3 `
-    -RestartInterval (New-TimeSpan -Minutes 1) `
-    -ExecutionTimeLimit ([System.TimeSpan]::Zero) `
-    -StartWhenAvailable `
-    -DontStopIfGoingOnBatteries `
-    -AllowStartIfOnBatteries `
-    -MultipleInstances IgnoreNew
+    $taskAction = New-ScheduledTaskAction `
+        -Execute "`"$PythonwExe`"" `
+        -Argument "`"$WatcherScript`""
 
-function Register-WatcherTask {
+    $taskTrigger = New-ScheduledTaskTrigger -AtLogon
+    $taskTrigger.Repetition = (New-ScheduledTaskTrigger -Once -At "00:00" `
+        -RepetitionInterval (New-TimeSpan -Minutes 30)).Repetition
+
+    $taskSettings = New-ScheduledTaskSettingsSet `
+        -RestartCount 3 `
+        -RestartInterval (New-TimeSpan -Minutes 1) `
+        -ExecutionTimeLimit ([System.TimeSpan]::Zero) `
+        -StartWhenAvailable `
+        -DontStopIfGoingOnBatteries `
+        -AllowStartIfOnBatteries `
+        -MultipleInstances IgnoreNew
+
     try {
         Register-ScheduledTask `
             -TaskName $TaskName `
@@ -313,34 +326,26 @@ function Register-WatcherTask {
             -Settings $taskSettings `
             -RunLevel Limited `
             -Force | Out-Null
-        return $true
+        Write-Host "  Scheduled task registered." -ForegroundColor Green
+        $completed += "Scheduled task"
     } catch {
         Write-Host "  ERROR: Failed to create scheduled task: $_" -ForegroundColor Red
-        return $false
+        exit 1
     }
-}
-
-if ($taskExists) {
-    Write-Host "  Task '$TaskName' already exists." -ForegroundColor Green
-    Write-Host ""
-    Write-Host "  1. Keep existing task" -ForegroundColor Cyan
-    Write-Host "  2. Replace it (use if watcher script moved)" -ForegroundColor Cyan
-    Write-Host ""
-    $choice = Read-Host "  Enter 1 or 2"
-    if ($choice -ne "2") {
-        Write-Host "  Kept existing task." -ForegroundColor Green
-    } else {
-        if (Register-WatcherTask) {
-            Write-Host "  Replaced." -ForegroundColor Green
-        } else { exit 1 }
+} elseif ($choice -eq "3" -and $taskExists) {
+    try {
+        $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+        if ($task.State -eq 'Running') {
+            Stop-ScheduledTask -TaskName $TaskName
+        }
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
+        Write-Host "  Scheduled task removed." -ForegroundColor Green
+    } catch {
+        Write-Host "  ERROR: Failed to remove task (may need admin): $_" -ForegroundColor Red
     }
 } else {
-    if (Register-WatcherTask) {
-        Write-Host "  Scheduled task registered." -ForegroundColor Green
-        Write-Host "  Runs at login: $WatcherScript"
-    } else { exit 1 }
+    Write-Host "  Skipped." -ForegroundColor Green
 }
-$completed += "Scheduled task"
 
 # =============================================================
 # Update config.json with current settings
@@ -401,8 +406,9 @@ Write-Host ""
 Write-Host "  Google Drive:  ${DriveLetter}:" -ForegroundColor Cyan
 Write-Host "  Watch folder:  $WatchPath" -ForegroundColor Cyan
 Write-Host "  Extracts to:   $DestinationFolder" -ForegroundColor Cyan
-Write-Host "  Watcher:       runs at login, auto-restarts, 30-min heartbeat" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  To start the watcher now:" -ForegroundColor Cyan
-Write-Host "    pythonw.exe `"$WatcherScript`""
+Write-Host "  Next: Add a VSCode folder-open task to your workspace (see README)." -ForegroundColor Cyan
+Write-Host ""
+Write-Host "  To run a manual check now:" -ForegroundColor Cyan
+Write-Host "    python `"$WatcherScript`" --check-now"
 Write-Host "============================================" -ForegroundColor $summaryColor
